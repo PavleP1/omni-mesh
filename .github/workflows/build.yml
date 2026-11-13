@@ -19,21 +19,110 @@ jobs:
           distribution: 'temurin'
           java-version: '11'
 
-      # 1. BUILD JAVA ME S40 .JAR (Nokia 2700 classic)
+      # 1. BUILD JAVA ME S40 .JAR (Nokia 2700 classic) with self-generated stubs
       - name: Compile Java ME MIDlet for Nokia 2700
         run: |
           echo "Creating build directories..."
-          mkdir -p s40_build/classes s40_build/lib
+          mkdir -p s40_build/stubs s40_build/classes s40_build/lib
           
-          # Download lightweight CLDC/MIDP and Bluetooth API stubs for compilation if available
-          curl -L -o s40_build/lib/cldc_midp.jar https://github.com/omnimesh/j2me-stubs/raw/main/cldc-midp.jar || true
+          echo "Generating local J2ME and Bluetooth API stubs..."
+          cat << 'EOF' > s40_build/stubs/Stubs.java
+          package javax.microedition.midlet;
+          public abstract class MIDlet {
+              public MIDlet() {}
+              public abstract void startApp();
+              public abstract void pauseApp();
+              public abstract void destroyApp(boolean u);
+              public final void notifyDestroyed() {}
+          }
+          package javax.microedition.lcdui;
+          public interface CommandListener { void commandAction(Command c, Displayable d); }
+          public interface Displayable {}
+          public class Display {
+              public static Display getDisplay(MIDlet m) { return null; }
+              public void setCurrent(Displayable d) {}
+          }
+          public class Command {
+              public static final int EXIT=0, SCREEN=1, OK=1, BACK=2, ITEM=1;
+              public static final Command SELECT_COMMAND = new Command("Select", OK, 1);
+              public Command(String l, int t, int p) {}
+          }
+          public class Screen implements Displayable {}
+          public class Form extends Screen {
+              public Form(String t) {}
+              public void append(Object o) {}
+              public void addCommand(Command c) {}
+              public void setCommandListener(CommandListener l) {}
+          }
+          public class List extends Screen implements Displayable {
+              public static final int IMPLICIT=0;
+              public List(String t, int i) {}
+              public int append(String s, java.awt.Image im) { return 0; }
+              public int getSelectedIndex() { return 0; }
+              public void addCommand(Command c) {}
+              public void setCommandListener(CommandListener l) {}
+          }
+          public class Item {}
+          public class StringItem extends Item {
+              public StringItem(String l, String t) {}
+              public void setText(String t) {}
+              public String getText() { return ""; }
+          }
+          public class TextField extends Item {
+              public static final int ANY=0;
+              public TextField(String l, String t, int m, int c) {}
+              public String getString() { return ""; }
+              public void setString(String s) {}
+          }
+          package javax.microedition.io;
+          import java.io.*;
+          public interface Connection {}
+          public interface StreamConnection extends Connection {
+              InputStream openInputStream() throws IOException;
+              OutputStream openOutputStream() throws IOException;
+              void close() throws IOException;
+          }
+          public interface StreamConnectionNotifier extends Connection {
+              StreamConnection acceptAndOpen() throws IOException;
+              void close() throws IOException;
+          }
+          public class Connector {
+              public static Connection open(String name) throws IOException { return null; }
+          }
+          package javax.bluetooth;
+          import java.io.IOException;
+          public class LocalDevice {
+              public static LocalDevice getLocalDevice() throws BluetoothStateException { return null; }
+              public DiscoveryAgent getDiscoveryAgent() { return null; }
+              public void setDiscoverable(int mode) {}
+              public String getFriendlyName() { return ""; }
+          }
+          public class DiscoveryAgent {
+              public static final int GIAC=0;
+              public void startInquiry(int accessCode, DiscoveryListener listener) {}
+          }
+          public interface DiscoveryListener {
+              void deviceDiscovered(RemoteDevice btDevice, DeviceClass cod);
+              void inquiryCompleted(int discType);
+              void servicesDiscovered(int transID, ServiceRecord[] servRecord);
+              void serviceSearchCompleted(int transID, int respCode);
+          }
+          public class RemoteDevice {
+              public String getFriendlyName(boolean arg0) { return ""; }
+              public String getBluetoothAddress() { return ""; }
+              public String getConnectionURL(int arg0, boolean arg1) { return ""; }
+          }
+          public class DeviceClass {}
+          public class ServiceRecord {}
+          public class BluetoothStateException extends Exception {}
+          EOF
+
+          echo "Compiling stubs into local library..."
+          javac -source 1.6 -target 1.6 -encoding UTF-8 -d s40_build/classes s40_build/stubs/Stubs.java
+          jar cf s40_build/lib/cldc_midp.jar -C s40_build/classes .
           
-          echo "Compiling Java sources with Java 1.6 source/target compliance..."
-          if [ -f s40_build/lib/cldc_midp.jar ]; then
-            javac -source 1.6 -target 1.6 -encoding UTF-8 -cp s40_build/lib/cldc_midp.jar -d s40_build/classes s40/OmniMeshS40.java
-          else
-            javac -source 1.6 -target 1.6 -encoding UTF-8 -d s40_build/classes s40/OmniMeshS40.java
-          fi
+          echo "Compiling OmniMeshS40.java against local stubs..."
+          javac -source 1.6 -target 1.6 -encoding UTF-8 -cp s40_build/lib/cldc_midp.jar -d s40_build/classes s40/OmniMeshS40.java
           
           echo "Packaging into JAR archive..."
           cd s40_build/classes && jar cf ../../omni_nokia2700.jar *
@@ -47,7 +136,6 @@ jobs:
           cp symbian/omnimesh.py symbian_build/
           cp symbian/omnimesh.pkg symbian_build/
           
-          # Bundle into a structured ZIP artifact representing the Symbian package
           cd symbian_build && zip -r ../omnimesh_e72_package.zip omnimesh.py omnimesh.pkg
           cd ../
           echo "Successfully packaged Symbian files"
@@ -68,14 +156,8 @@ jobs:
       - name: Assemble Final Release Artifacts
         run: |
           mkdir -p final_release
-          
-          # Move Java ME JAR
           cp omni_nokia2700.jar final_release/
-          
-          # Move Symbian Package
           cp omnimesh_e72_package.zip final_release/
-          
-          # Move Android APK
           find android/app/build/outputs/apk/debug/ -name "*.apk" -exec cp {} final_release/ \;
           
           echo "Release folder contents:"
