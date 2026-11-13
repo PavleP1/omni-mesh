@@ -20,14 +20,14 @@ jobs:
           java-version: '11'
 
       # 1. BUILD JAVA ME S40 .JAR (Nokia 2700 classic)
-      # Uses Java 1.3 compatibility flags so the S40 JVM can execute the bytecode without crashing
+      # Uses Java 6 (-source 1.6 -target 1.6) bytecode compliance so the S40 JVM accepts it
       - name: Compile Java ME MIDlet for Nokia 2700
         run: |
           echo "Creating build directories..."
           mkdir -p s40_build/classes
           
-          echo "Compiling Java sources with Java 1.3 source/target compliance..."
-          javac -source 1.3 -target 1.3 -encoding UTF-8 -d s40_build/classes s40/OmniMeshS40.java
+          echo "Compiling Java sources with Java 1.6 source/target compliance..."
+          javac -source 1.6 -target 1.6 -encoding UTF-8 -d s40_build/classes s40/OmniMeshS40.java
           
           echo "Packaging into JAR archive..."
           cd s40_build/classes && jar cf ../../omni_nokia2700.jar *
