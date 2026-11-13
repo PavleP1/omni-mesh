@@ -1,0 +1,83 @@
+name: Build OmniMesh Multi-Platform Suite
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-all-platforms:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      # 1. BUILD JAVA ME S40 .JAR (Nokia 2700 classic)
+      # Uses Java 1.3 compatibility flags so the S40 JVM can execute the bytecode without crashing
+      - name: Compile Java ME MIDlet for Nokia 2700
+        run: |
+          echo "Creating build directories..."
+          mkdir -p s40_build/classes
+          
+          echo "Compiling Java sources with Java 1.3 source/target compliance..."
+          javac -source 1.3 -target 1.3 -encoding UTF-8 -d s40_build/classes s40/OmniMeshS40.java
+          
+          echo "Packaging into JAR archive..."
+          cd s40_build/classes && jar cf ../../omni_nokia2700.jar *
+          cd ../../
+          echo "Successfully generated omni_nokia2700.jar"
+
+      # 2. PACKAGE SYMBIAN ASSETS (Nokia E72)
+      - name: Package Symbian Distribution Assets
+        run: |
+          mkdir -p symbian_build
+          cp symbian/omnimesh.py symbian_build/
+          cp symbian/omnimesh.pkg symbian_build/
+          
+          # Bundle into a structured ZIP artifact representing the Symbian package
+          cd symbian_build && zip -r ../omnimesh_e72_package.zip omnimesh.py omnimesh.pkg
+          cd ../
+          echo "Successfully packaged Symbian files"
+
+      # 3. SET UP ANDROID SDK & BUILD APK
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Grant execute permission for Gradle wrapper
+        working-directory: ./android
+        run: chmod +x gradlew || true
+
+      - name: Build Android Debug APK
+        working-directory: ./android
+        run: ./gradlew assembleDebug
+
+      # 4. COLLECT ALL ARTIFACTS INTO A UNIFIED RELEASE FOLDER
+      - name: Assemble Final Release Artifacts
+        run: |
+          mkdir -p final_release
+          
+          # Move Java ME JAR
+          cp omni_nokia2700.jar final_release/
+          
+          # Move Symbian Package
+          cp omnimesh_e72_package.zip final_release/
+          
+          # Move Android APK
+          find android/app/build/outputs/apk/debug/ -name "*.apk" -exec cp {} final_release/ \;
+          
+          echo "Release folder contents:"
+          ls -la final_release/
+
+      - name: Upload Artifacts to GitHub Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: omnimesh-crossplatform-binaries
+          path: final_release/*
+          
