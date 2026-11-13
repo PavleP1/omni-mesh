@@ -1,0 +1,13 @@
+; OmniMesh E72 Package Deployment File
+; Language - Standard English
+#{"OmniMesh"}, (0xEF92A1B2), 1, 0, 0, type=s60
+
+; Vendor name
+%{"OmniMesh Team"}
+:"OmniMesh"
+
+; Target Dependency for S60 3rd Edition Feature Pack 2 (Nokia E72)
+[0x101F7961], 0, 0, 0, {"S60ProductID"}
+
+; Files to install on device internal memory or mass storage (!)
+"omnimesh.py" -"!:private\2000923e\omnimesh.py"
