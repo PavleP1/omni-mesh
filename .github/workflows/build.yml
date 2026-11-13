@@ -14,19 +14,23 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK 11
-        uses: actions/setup-java@v4
+        uses: android-actions/setup-android@v3
         with:
           distribution: 'temurin'
           java-version: '11'
 
-      # 1. BUILD JAVA ME S40 .JAR (Nokia 2700 classic) with self-generated stubs
+      # 1. BUILD JAVA ME S40 .JAR (Nokia 2700 classic) with proper package stubs
       - name: Compile Java ME MIDlet for Nokia 2700
         run: |
           echo "Creating build directories..."
-          mkdir -p s40_build/stubs s40_build/classes s40_build/lib
-          
-          echo "Generating local J2ME and Bluetooth API stubs..."
-          cat << 'EOF' > s40_build/stubs/Stubs.java
+          mkdir -p s40_build/stubs/javax/microedition/midlet \
+                   s40_build/stubs/javax/microedition/lcdui \
+                   s40_build/stubs/javax/microedition/io \
+                   s40_build/stubs/javax/bluetooth \
+                   s40_build/classes
+
+          echo "Writing MIDlet stub..."
+          cat << 'EOF' > s40_build/stubs/javax/microedition/midlet/MIDlet.java
           package javax.microedition.midlet;
           public abstract class MIDlet {
               public MIDlet() {}
@@ -35,6 +39,10 @@ jobs:
               public abstract void destroyApp(boolean u);
               public final void notifyDestroyed() {}
           }
+          EOF
+
+          echo "Writing LCDUI stubs..."
+          cat << 'EOF' > s40_build/stubs/javax/microedition/lcdui/Components.java
           package javax.microedition.lcdui;
           public interface CommandListener { void commandAction(Command c, Displayable d); }
           public interface Displayable {}
@@ -74,6 +82,10 @@ jobs:
               public String getString() { return ""; }
               public void setString(String s) {}
           }
+          EOF
+
+          echo "Writing IO stubs..."
+          cat << 'EOF' > s40_build/stubs/javax/microedition/io/IO.java
           package javax.microedition.io;
           import java.io.*;
           public interface Connection {}
@@ -89,6 +101,10 @@ jobs:
           public class Connector {
               public static Connection open(String name) throws IOException { return null; }
           }
+          EOF
+
+          echo "Writing Bluetooth stubs..."
+          cat << 'EOF' > s40_build/stubs/javax/bluetooth/Bluetooth.java
           package javax.bluetooth;
           import java.io.IOException;
           public class LocalDevice {
@@ -117,12 +133,12 @@ jobs:
           public class BluetoothStateException extends Exception {}
           EOF
 
-          echo "Compiling stubs into local library..."
-          javac -source 1.6 -target 1.6 -encoding UTF-8 -d s40_build/classes s40_build/stubs/Stubs.java
-          jar cf s40_build/lib/cldc_midp.jar -C s40_build/classes .
+          echo "Compiling stubs..."
+          find s40_build/stubs -name "*.java" > s40_build/sources.txt
+          javac -source 6 -target 6 -encoding UTF-8 -d s40_build/classes @s40_build/sources.txt
           
-          echo "Compiling OmniMeshS40.java against local stubs..."
-          javac -source 1.6 -target 1.6 -encoding UTF-8 -cp s40_build/lib/cldc_midp.jar -d s40_build/classes s40/OmniMeshS40.java
+          echo "Compiling OmniMeshS40.java against stubs..."
+          javac -source 6 -target 6 -encoding UTF-8 -cp s40_build/classes -d s40_build/classes s40/OmniMeshS40.java
           
           echo "Packaging into JAR archive..."
           cd s40_build/classes && jar cf ../../omni_nokia2700.jar *
@@ -135,15 +151,11 @@ jobs:
           mkdir -p symbian_build
           cp symbian/omnimesh.py symbian_build/
           cp symbian/omnimesh.pkg symbian_build/
-          
           cd symbian_build && zip -r ../omnimesh_e72_package.zip omnimesh.py omnimesh.pkg
           cd ../
           echo "Successfully packaged Symbian files"
 
-      # 3. SET UP ANDROID SDK & BUILD APK
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
+      # 3. BUILD ANDROID DEBUG APK
       - name: Grant execute permission for Gradle wrapper
         working-directory: ./android
         run: chmod +x gradlew || true
@@ -159,7 +171,6 @@ jobs:
           cp omni_nokia2700.jar final_release/
           cp omnimesh_e72_package.zip final_release/
           find android/app/build/outputs/apk/debug/ -name "*.apk" -exec cp {} final_release/ \;
-          
           echo "Release folder contents:"
           ls -la final_release/
 
