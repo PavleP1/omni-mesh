@@ -20,14 +20,20 @@ jobs:
           java-version: '11'
 
       # 1. BUILD JAVA ME S40 .JAR (Nokia 2700 classic)
-      # Uses Java 6 (-source 1.6 -target 1.6) bytecode compliance so the S40 JVM accepts it
       - name: Compile Java ME MIDlet for Nokia 2700
         run: |
           echo "Creating build directories..."
-          mkdir -p s40_build/classes
+          mkdir -p s40_build/classes s40_build/lib
+          
+          # Download lightweight CLDC/MIDP and Bluetooth API stubs for compilation if available
+          curl -L -o s40_build/lib/cldc_midp.jar https://github.com/omnimesh/j2me-stubs/raw/main/cldc-midp.jar || true
           
           echo "Compiling Java sources with Java 1.6 source/target compliance..."
-          javac -source 1.6 -target 1.6 -encoding UTF-8 -d s40_build/classes s40/OmniMeshS40.java
+          if [ -f s40_build/lib/cldc_midp.jar ]; then
+            javac -source 1.6 -target 1.6 -encoding UTF-8 -cp s40_build/lib/cldc_midp.jar -d s40_build/classes s40/OmniMeshS40.java
+          else
+            javac -source 1.6 -target 1.6 -encoding UTF-8 -d s40_build/classes s40/OmniMeshS40.java
+          fi
           
           echo "Packaging into JAR archive..."
           cd s40_build/classes && jar cf ../../omni_nokia2700.jar *
@@ -80,4 +86,3 @@ jobs:
         with:
           name: omnimesh-crossplatform-binaries
           path: final_release/*
-          
